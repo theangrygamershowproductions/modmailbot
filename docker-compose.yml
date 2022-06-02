@@ -1,0 +1,62 @@
+version: "3.3"
+services:
+  mongo_db:
+    image: mongo:4.2.12
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: $MONGO_INITDB_ROOT_USERNAME
+      MONGO_INITDB_ROOT_PASSWORD: $MONGO_INITDB_ROOT_PASSWORD
+    ports:
+      - 27017:27017
+    volumes:
+      - ./db/mongoData:/data/db
+      - ./db/docker-entrypoint-initdb.d/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - network
+
+  mongo_express:
+    image: mongo-express:0.54.0
+    environment:
+      - ME_CONFIG_OPTIONS_EDITORTHEME=$ME_CONFIG_OPTIONS_EDITORTHEME
+      - ME_CONFIG_MONGODB_SERVER=$ME_CONFIG_MONGODB_SERVER
+      - ME_CONFIG_MONGODB_PORT=$ME_CONFIG_MONGODB_PORT
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=$ME_CONFIG_MONGODB_ENABLE_ADMIN
+      - ME_CONFIG_MONGODB_AUTH_DATABASE=$ME_CONFIG_MONGODB_AUTH_DATABASE
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=$ME_CONFIG_MONGODB_ADMINUSERNAME
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=$ME_CONFIG_MONGODB_ADMINPASSWORD
+    ports:
+      - "8081:8081"
+    networks:
+      - network
+    restart: on-failure
+    depends_on:
+      - mongo_db
+
+  nodejs:
+    depends_on:
+      - mongo_db
+    links:
+      - mongo_db
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nodejs
+    container_name: nodejs
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MONGO_USERNAME=$MONGO_USERNAME
+      - MONGO_PASSWORD=$MONGO_PASSWORD
+      - MONGO_HOSTNAME=$MONGO_HOSTNAME
+      - MONGO_PORT=$MONGO_PORT
+      - MONGO_DB=$MONGO_DB
+    ports:
+      - "80:8080"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - network
+    command: ./wait-for.sh mongo_db:27017 -- ./node_modules/.bin/nodemon app.js
+networks:
+  network:
+    driver: bridge
