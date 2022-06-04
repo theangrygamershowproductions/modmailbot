@@ -64,6 +64,8 @@ module.exports = ({ bot, knex, config, commands, hooks }) => {
       message += "\nTo view more, add a page number to the end of the command";
     }
 
+    if (threadLines.length === 0) message = `**There are no log files for <@${userId}>**`;
+    
     // Send the list of logs in chunks of 15 lines per message
     const lines = message.split("\n");
     const chunks = utils.chunk(lines, 15);
@@ -116,8 +118,12 @@ module.exports = ({ bot, knex, config, commands, hooks }) => {
   commands.addInboxServerCommand("logs", "<userId:userId> [page:number]", logsCmd, { options: logCmdOptions });
   commands.addInboxServerCommand("logs", "[page:number]", logsCmd, { options: logCmdOptions });
 
-  commands.addInboxServerCommand("log", "[threadId:string]", logCmd, { options: logCmdOptions, aliases: ["thread"] });
-  commands.addInboxServerCommand("loglink", "[threadId:string]", logCmd, { options: logCmdOptions });
+  // Add these two overrides to allow using the command in suspended threads
+  commands.addInboxThreadCommand("log", "", logCmd, { options: logCmdOptions, aliases: ["thread"], allowSuspended: true });
+  commands.addInboxThreadCommand("loglink", "", logCmd, { options: logCmdOptions, allowSuspended: true });
+
+  commands.addInboxServerCommand("log", "<threadId:string>", logCmd, { options: logCmdOptions, aliases: ["thread"] });
+  commands.addInboxServerCommand("loglink", "<threadId:string>", logCmd, { options: logCmdOptions });
 
   hooks.afterThreadClose(async ({ threadId }) => {
     const thread = await threads.findById(threadId);
