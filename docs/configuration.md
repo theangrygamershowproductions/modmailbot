@@ -131,8 +131,7 @@ If enabled, moderators can add notes on users using the `!note` command.
 #### alwaysReply
 **Default:** `off`  
 If enabled, all messages in modmail threads will be sent to the user without having to use `!r`.  
-To send internal messages in the thread when this option is enabled, prefix them with `!note` (using your `prefix`),
-e.g. `!note This is an internal message`.
+To send internal messages in the thread when this option is enabled, add your command prefix (e.g. `!`) and a space at the beginning of the messages. For example, `! This is an internal message`.
 
 #### alwaysReplyAnon
 **Default:** `off`  
@@ -567,3 +566,5 @@ Examples:
   `MM_INBOX_SERVER_PERMISSION=kickMembers||manageMessages`
 
 The `port` option also accepts the environment variable `PORT` without a prefix, but `MM_PORT` takes precedence.
+
+You can also supply environment variables by creating a file called `.env` in the bot's directory.

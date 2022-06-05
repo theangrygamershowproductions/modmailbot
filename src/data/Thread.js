@@ -8,7 +8,10 @@ const config = require("../cfg");
 const attachments = require("./attachments");
 const { formatters } = require("../formatters");
 const { callBeforeNewMessageReceivedHooks } = require("../hooks/beforeNewMessageReceived");
+const { callAfterNewMessageReceivedHooks } = require("../hooks/afterNewMessageReceived");
 const { callAfterThreadCloseHooks } = require("../hooks/afterThreadClose");
+const { callAfterThreadCloseScheduledHooks } = require("../hooks/afterThreadCloseScheduled");
+const { callAfterThreadCloseScheduleCanceledHooks } = require("../hooks/afterThreadCloseScheduleCanceled");
 const snippets = require("./snippets");
 const { getModeratorThreadDisplayRoleName } = require("./displayRoles");
 
@@ -16,6 +19,7 @@ const ThreadMessage = require("./ThreadMessage");
 
 const {THREAD_MESSAGE_TYPE, THREAD_STATUS, DISCORD_MESSAGE_ACTIVITY_TYPES} = require("./constants");
 const {isBlocked} = require("./blocked");
+const {messageContentToAdvancedMessageContent} = require("../utils");
 
 const escapeFormattingRegex = new RegExp("[_`~*|]", "g");
 
@@ -295,8 +299,7 @@ class Thread {
     });
     const threadMessage = await this._addThreadMessageToDB(rawThreadMessage.getSQLProps());
 
-    /** @var {Eris.AdvancedMessageContent} dmContent */
-    const dmContent = { content: formatters.formatStaffReplyDM(threadMessage) };
+    const dmContent = messageContentToAdvancedMessageContent(await formatters.formatStaffReplyDM(threadMessage));
     if (userMessageReference) {
       dmContent.messageReference = {
         ...userMessageReference,
@@ -304,8 +307,7 @@ class Thread {
       };
     }
 
-    /** @var {Eris.AdvancedMessageContent} inboxContent */
-    const inboxContent = { content: formatters.formatStaffReplyThreadMessage(threadMessage) };
+    const inboxContent = messageContentToAdvancedMessageContent(await formatters.formatStaffReplyThreadMessage(threadMessage));
     if (messageReference) {
       inboxContent.messageReference = {
         channelID: messageReference.channelID,
@@ -467,8 +469,7 @@ class Thread {
     threadMessage = await this._addThreadMessageToDB(threadMessage.getSQLProps());
 
     // Show user reply in the inbox thread
-    /** @var {Eris.AdvancedMessageContent} inboxContent */
-    const inboxContent = { content: formatters.formatUserReplyThreadMessage(threadMessage) };
+    const inboxContent = messageContentToAdvancedMessageContent(await formatters.formatUserReplyThreadMessage(threadMessage));
     if (messageReference) {
       inboxContent.messageReference = {
         channelID: messageReference.channelID,
@@ -484,6 +485,13 @@ class Thread {
     if (config.reactOnSeen) {
       await msg.addReaction(config.reactOnSeenEmoji).catch(utils.noop);
     }
+
+    // Call any registered afterNewMessageReceivedHooks
+    await callAfterNewMessageReceivedHooks({
+      user,
+      opts,
+      message: opts.message
+    });
 
     // Interrupt scheduled closing, if in progress
     if (this.scheduled_close_at) {
@@ -534,18 +542,15 @@ class Thread {
       is_anonymous: 0,
     });
 
-    const content = await formatters.formatSystemThreadMessage(threadMessage);
-
-    /** @var {Eris.AdvancedMessageContent} finalContent */
-    const finalContent = typeof content === "string" ? { content } : content;
-    finalContent.allowedMentions = opts.allowedMentions;
+    const content = messageContentToAdvancedMessageContent(await formatters.formatSystemThreadMessage(threadMessage));
+    content.allowedMentions = opts.allowedMentions;
     if (opts.messageReference) {
-      finalContent.messageReference = {
+      content.messageReference = {
         ...opts.messageReference,
         failIfNotExists: false,
       };
     }
-    const msg = await this._postToThreadChannel(finalContent);
+    const msg = await this._postToThreadChannel(content);
 
     threadMessage.inbox_message_id = msg.id;
     const finalThreadMessage = await this._addThreadMessageToDB(threadMessage.getSQLProps());
@@ -783,6 +788,8 @@ class Thread {
         scheduled_close_name: user.username,
         scheduled_close_silent: silent
       });
+
+    await callAfterThreadCloseScheduledHooks({ thread: this });
   }
 
   /**
@@ -797,6 +804,8 @@ class Thread {
         scheduled_close_name: null,
         scheduled_close_silent: null
       });
+
+    await callAfterThreadCloseScheduleCanceledHooks({ thread: this });
   }
 
   /**
@@ -941,8 +950,8 @@ class Thread {
       body: newText,
     });
 
-    const formattedThreadMessage = formatters.formatStaffReplyThreadMessage(newThreadMessage);
-    const formattedDM = formatters.formatStaffReplyDM(newThreadMessage);
+    const formattedThreadMessage = await formatters.formatStaffReplyThreadMessage(newThreadMessage);
+    const formattedDM = await formatters.formatStaffReplyDM(newThreadMessage);
 
     // Same restriction as in replies. Because edits could theoretically change the number of messages a reply takes, we enforce replies
     // to fit within 1 message to avoid the headache and issues caused by that.
@@ -965,7 +974,7 @@ class Thread {
       editThreadMessage.setMetadataValue("originalThreadMessage", threadMessage);
       editThreadMessage.setMetadataValue("newBody", newText);
 
-      const threadNotification = formatters.formatStaffReplyEditNotificationThreadMessage(editThreadMessage);
+      const threadNotification = await formatters.formatStaffReplyEditNotificationThreadMessage(editThreadMessage);
       const inboxMessage = await this._postToThreadChannel(threadNotification);
       editThreadMessage.inbox_message_id = inboxMessage.id;
       await this._addThreadMessageToDB(editThreadMessage.getSQLProps());
@@ -996,7 +1005,7 @@ class Thread {
       });
       deletionThreadMessage.setMetadataValue("originalThreadMessage", threadMessage);
 
-      const threadNotification = formatters.formatStaffReplyDeletionNotificationThreadMessage(deletionThreadMessage);
+      const threadNotification = await formatters.formatStaffReplyDeletionNotificationThreadMessage(deletionThreadMessage);
       const inboxMessage = await this._postToThreadChannel(threadNotification);
       deletionThreadMessage.inbox_message_id = inboxMessage.id;
       await this._addThreadMessageToDB(deletionThreadMessage.getSQLProps());

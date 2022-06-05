@@ -145,7 +145,7 @@ function initBaseMessageHandlers() {
       // AUTO-REPLY: If config.alwaysReply is enabled, send all chat messages in thread channels as replies
       if (! utils.isStaff(msg.member)) return; // Only staff are allowed to reply
 
-      const replied = await thread.replyToUser(msg.member, msg.content.trim(), msg.attachments, config.alwaysReplyAnon || false);
+      const replied = await thread.replyToUser(msg.member, msg.content.trim(), msg.attachments, config.alwaysReplyAnon || false, msg.messageReference);
       if (replied) msg.delete();
     } else {
       // Otherwise just save the messages as "chat" in the logs
@@ -243,7 +243,7 @@ function initBaseMessageHandlers() {
 
         const threadMessageWithEdit = threadMessage.clone();
         threadMessageWithEdit.body = newContent;
-        const formatted = formatters.formatUserReplyThreadMessage(threadMessageWithEdit);
+        const formatted = await formatters.formatUserReplyThreadMessage(threadMessageWithEdit);
         await bot.editMessage(thread.channel_id, threadMessage.inbox_message_id, formatted).catch(console.warn);
       } else {
         await thread.postSystemMessage(editMessage);
